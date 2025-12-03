@@ -128,13 +128,13 @@
     </style>
     <script type="module">
 
-        // This version uses local storage, not Firebase, so no imports are needed.
-
         const SCENARIOS = [
             {
                 id: 1,
                 topic: "Conflict Resolution (The Four Horsemen)",
                 date: "Jan 12, 2024",
+                contactName: "Ryan",
+                relationshipStatus: "Dating (1 year)",
                 personA: [
                     "Hey, I know you want me to do more in the house, but you know how tiring it is coming home from a ten hour shift?",
                     "I don’t complain when you’re tired and don’t do something around the house"
@@ -150,6 +150,8 @@
                 id: 2,
                 topic: "Figuring out how to love (Love Languages)",
                 date: "Nov 3, 2023",
+                contactName: "Sarah",
+                relationshipStatus: "Serious Relationship (3 years)",
                 personA: [
                     "I had a really rough week and it feels like we're just roommates passing in the hall. I feel really disconnected."
                 ],
@@ -164,6 +166,8 @@
                 id: 3,
                 topic: "Exploring Affection (Sternberg's Triangle)",
                 date: "Oct 5, 2023",
+                contactName: "Alex",
+                relationshipStatus: "New Dating Phase (2 months)",
                 personA: [
                     "I can’t seem to get you off my mind, I miss you."
                 ],
@@ -178,6 +182,8 @@
                 id: 4,
                 topic: "Defining the Relationship (Sternberg's Triangle)",
                 date: "Aug 1, 2023",
+                contactName: "Jamie",
+                relationshipStatus: "Exclusive (6 months)",
                 personA: [
                     "Hey, we’ve been talking for awhile, and I’ve been thinking…",
                     "What are we?"
@@ -193,6 +199,8 @@
                 id: 5,
                 topic: "Emotional Support (Companionate Love)",
                 date: "June 24, 2024",
+                contactName: "Kai",
+                relationshipStatus: "Long-term Marriage (10 years)",
                 personA: [
                     "I had a really bad day today, so I might come off a bit standoffish"
                 ],
@@ -207,6 +215,8 @@
                 id: 6,
                 topic: "The Ultimate Question (Sternberg's Triangle)",
                 date: "Jan 1, 2025",
+                contactName: "Taylor",
+                relationshipStatus: "Fiancé (Engaged)",
                 personA: [
                     "hey..",
                     "do you love me?"
@@ -298,6 +308,10 @@
         const optionsContainer = document.getElementById('options-container');
         const scoreDisplay = document.getElementById('score-display');
         const currentTopicDisplay = document.getElementById('current-topic');
+        // New display elements for dynamic header
+        const contactNameDisplay = document.getElementById('contact-name');
+        const relationshipStatusDisplay = document.getElementById('relationship-status');
+
 
         const handleScenarioJump = () => {
             const inputElement = document.getElementById('scenario-id-input');
@@ -318,6 +332,7 @@
             customAlert(`Jumping to Scenario ${scenarioId}. Score has been reset.`);
             inputElement.value = '';
             saveGame();
+            renderGame(); // Renders the new scenario immediately after the jump
         };
 
 
@@ -325,6 +340,21 @@
             scoreDisplay.textContent = `Score: ${gameState.score}`;
             chatWindow.innerHTML = '';
             optionsContainer.innerHTML = '';
+
+            // Handle Game Over State
+            if (gameState.currentScenarioIndex >= SCENARIOS.length) {
+                displayGameOver();
+                contactNameDisplay.textContent = 'Challenge Complete';
+                relationshipStatusDisplay.textContent = 'Reviewing Results';
+                return;
+            }
+
+            const currentScenario = SCENARIOS[gameState.currentScenarioIndex];
+
+            // DYNAMIC HEADER UPDATE
+            contactNameDisplay.textContent = currentScenario.contactName;
+            relationshipStatusDisplay.textContent = currentScenario.relationshipStatus;
+            currentTopicDisplay.textContent = `Scenario ${currentScenario.id}: ${currentScenario.topic}`;
 
             // Render chat history
             gameState.history.forEach(item => {
@@ -335,14 +365,6 @@
                     appendFeedback(item.feedback, item.scoreChange, item.concept);
                 }
             });
-
-            if (gameState.currentScenarioIndex >= SCENARIOS.length) {
-                displayGameOver();
-                return;
-            }
-
-            const currentScenario = SCENARIOS[gameState.currentScenarioIndex];
-            currentTopicDisplay.textContent = `Scenario ${currentScenario.id}: ${currentScenario.topic}`;
 
             const dateDiv = document.createElement('div');
             dateDiv.className = 'text-timestamp text-center my-3';
@@ -384,14 +406,14 @@
         const handleChoice = (selectedOption) => {
             const currentScenario = SCENARIOS[gameState.currentScenarioIndex];
 
-            if (gameState.history.length === 0 || gameState.history[gameState.history.length - 1].type === 'B') {
-                gameState.history.push({
-                    type: 'A',
-                    messages: currentScenario.personA,
-                    concept: currentScenario.topic,
-                });
-            }
+            // Record the incoming message(s) as the prompt for the completed scenario (Type A)
+            gameState.history.push({
+                type: 'A',
+                messages: currentScenario.personA,
+                contact: currentScenario.contactName, // Store contact name in history for completeness
+            });
 
+            // Record the chosen response and the corresponding feedback (Type B)
             gameState.history.push({
                 type: 'B',
                 chosenText: selectedOption.text,
@@ -404,6 +426,7 @@
             gameState.currentScenarioIndex += 1;
 
             saveGame();
+            renderGame(); // Renders the updated history and the next scenario immediately
         };
 
         const displayGameOver = () => {
@@ -441,6 +464,7 @@
             gameState.currentScenarioIndex = 0;
             gameState.history = [];
             saveGame();
+            renderGame(); // Renders the start of the game immediately after reset
         }
 
     </script>
@@ -462,8 +486,9 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
             </svg>
             <div class="flex flex-col items-center">
-                <span class="font-bold text-lg">Person A</span>
-                <span class="text-xs opacity-80">3-Year Relationship</span>
+                <!-- Dynamic Content for Contact Name and Status -->
+                <span id="contact-name" class="font-bold text-lg">Loading...</span>
+                <span id="relationship-status" class="text-xs opacity-80"></span>
             </div>
             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                 xmlns="http://www.w3.org/2000/svg">
@@ -482,7 +507,6 @@
             </div>
             <div class="flex justify-between items-center mt-2">
                 <div id="score-display" class="text-sm font-semibold text-gray-700">Score: 0</div>
-                <!-- Removed User ID display as it's no longer necessary without Firebase authentication -->
             </div>
 
 
