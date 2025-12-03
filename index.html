@@ -127,38 +127,8 @@
         }
     </style>
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        setLogLevel('Debug');
-
-        let app, db, auth;
-        let userId = 'anonymous';
-
-        // ====================================================================
-        // === IMPORTANT: REPLACE THESE VARIABLES WITH YOUR FIREBASE CONFIG ===
-        // ====================================================================
-        // When running on your own website, replace 'default-app-id' with a unique string 
-        // and put your Firebase project configuration object here (found in console).
-        const CUSTOM_APP_ID = 'loveactuallyfinal'; // Replaced with the project ID
-        const CUSTOM_FIREBASE_CONFIG = { // Replaced 'null' with your JSON config object
-            apiKey: "AIzaSyCVSYSQE5WUMQtOmWQjZMHlEu30Z-X96U",
-            authDomain: "loveactuallyfinal.firebaseapp.com",
-            projectId: "loveactuallyfinal",
-            storageBucket: "loveactuallyfinal.firebasestorage.app",
-            messagingSenderId: "815805468336",
-            appId: "1:815805468336:web:a8abe786c7ef213af03575",
-            measurementId: "G-DRSR8FSMHZ"
-        };
-        // ====================================================================
-
-        // Canvas environment variables (used if CUSTOM_FIREBASE_CONFIG is null)
-        const appId = CUSTOM_FIREBASE_CONFIG ? CUSTOM_APP_ID : (typeof __app_id !== 'undefined' ? __app_id : CUSTOM_APP_ID);
-        const firebaseConfig = CUSTOM_FIREBASE_CONFIG ? CUSTOM_FIREBASE_CONFIG : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null);
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
+        // This version uses local storage, not Firebase, so no imports are needed.
 
         const SCENARIOS = [
             {
@@ -257,84 +227,41 @@
             lastUpdated: new Date().toISOString()
         };
 
-        const gameStateRef = () => doc(db, `artifacts/${appId}/users/${userId}/relationship_game`, 'state');
-
         document.addEventListener('DOMContentLoaded', () => {
-            if (!firebaseConfig) {
-                // This error will only occur if CUSTOM_FIREBASE_CONFIG is null AND 
-                // the Canvas environment variables are missing.
-                document.getElementById('loading').innerHTML = '<h2>Error: Firebase configuration not found. Please add your config to the script block.</h2>';
-                return;
-            }
+            loadGameState();
 
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    userId = user.uid;
-                } else if (initialAuthToken) {
-                    try {
-                        // This path is for the Canvas environment
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        userId = auth.currentUser.uid;
-                    } catch (error) {
-                        console.error("Custom Auth failed, signing in anonymously.", error);
-                        await signInAnonymously(auth);
-                        userId = auth.currentUser.uid;
-                    }
-                } else {
-                    // This path is used when hosting on your own site
-                    await signInAnonymously(auth);
-                    userId = auth.currentUser.uid;
-                }
-
-                // 2. Load game state and start listening for updates
-                console.log(`Authenticated with userId: ${userId}`);
-                document.getElementById('userIdDisplay').textContent = userId;
-                loadGameState();
-
-                // Setup event listener for the debug jump button
-                document.getElementById('jump-button').onclick = handleScenarioJump;
-            });
+            // Setup event listener for the debug jump button
+            document.getElementById('jump-button').onclick = handleScenarioJump;
         });
 
 
-        const loadGameState = async () => {
-            const docRef = gameStateRef();
-            onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    gameState = docSnap.data();
-                    console.log("Game state loaded/updated:", gameState);
-                } else {
-                    console.log("No existing game state found. Starting new game.");
-                    saveGame();
+        const loadGameState = () => {
+            const savedState = localStorage.getItem('relationshipGame');
+            if (savedState) {
+                try {
+                    gameState = JSON.parse(savedState);
+                    console.log("Game state loaded from local storage:", gameState);
+                } catch (e) {
+                    console.error("Error parsing local storage state, starting new game.", e);
+                    // Keep default gameState
                 }
+            } else {
+                console.log("No existing game state found. Starting new game.");
+            }
 
-                renderGame();
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('phone-frame').classList.remove('hidden');
-            }, (error) => {
-                console.error("Firebase Connection Error:", error);
-                document.getElementById('loading').innerHTML = `
-                    <h2 class="text-xl text-red-700">Database Connection Error</h2>
-                    <p class="text-red-500 font-mono text-sm mt-2 p-2 bg-red-100 rounded-lg">
-                        Check your Firebase Security Rules.
-                        <br>The current user ID (${userId}) is likely being denied read/write access.
-                    </p>
-                    <p class="text-xs mt-3 text-gray-600">See browser console for full error details.</p>
-                `;
-            });
+            // Immediately render and hide loading screen since there's no auth wait
+            renderGame();
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('phone-frame').classList.remove('hidden');
         };
 
-        const saveGame = async () => {
+        const saveGame = () => {
             gameState.lastUpdated = new Date().toISOString();
             try {
-                await setDoc(gameStateRef(), gameState, { merge: true });
-                console.log("Game state saved successfully.");
+                localStorage.setItem('relationshipGame', JSON.stringify(gameState));
+                console.log("Game state saved successfully to local storage.");
             } catch (e) {
-                console.error("Error saving document: ", e);
+                console.error("Error saving state to local storage: ", e);
             }
         };
 
@@ -399,6 +326,7 @@
             chatWindow.innerHTML = '';
             optionsContainer.innerHTML = '';
 
+            // Render chat history
             gameState.history.forEach(item => {
                 if (item.type === 'A') {
                     item.messages.forEach(msg => appendMessage(msg, 'incoming'));
@@ -431,6 +359,7 @@
                 optionsContainer.appendChild(button);
             });
 
+            // Scroll to the latest message
             chatWindow.scrollTop = chatWindow.scrollHeight;
         };
 
@@ -519,9 +448,10 @@
 
 <body class="bg-gray-100 p-4">
 
+    <!-- Loading screen now only displays briefly before loading LocalStorage state -->
     <div id="loading" class="absolute inset-0 flex flex-col justify-center items-center bg-gray-50 z-50">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        <p class="mt-4 text-gray-600">Authenticating and Loading Relationship...</p>
+        <p class="mt-4 text-gray-600">Loading Relationship Challenge...</p>
     </div>
 
     <div id="phone-frame" class="hidden">
@@ -552,8 +482,7 @@
             </div>
             <div class="flex justify-between items-center mt-2">
                 <div id="score-display" class="text-sm font-semibold text-gray-700">Score: 0</div>
-                <p class="text-xs text-gray-400 text-right">User ID: <span id="userIdDisplay" class="font-mono"></span>
-                </p>
+                <!-- Removed User ID display as it's no longer necessary without Firebase authentication -->
             </div>
 
 
