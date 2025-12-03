@@ -156,6 +156,9 @@
 
         // Canvas environment variables (used if CUSTOM_FIREBASE_CONFIG is null)
         const appId = CUSTOM_FIREBASE_CONFIG ? CUSTOM_APP_ID : (typeof __app_id !== 'undefined' ? __app_id : CUSTOM_APP_ID);
+        const firebaseConfig = CUSTOM_FIREBASE_CONFIG ? CUSTOM_FIREBASE_CONFIG : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null);
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
 
         const SCENARIOS = [
             {
@@ -258,7 +261,9 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             if (!firebaseConfig) {
-                document.getElementById('loading').innerHTML = '<h2>Error: Firebase configuration not found.</h2>';
+                // This error will only occur if CUSTOM_FIREBASE_CONFIG is null AND 
+                // the Canvas environment variables are missing.
+                document.getElementById('loading').innerHTML = '<h2>Error: Firebase configuration not found. Please add your config to the script block.</h2>';
                 return;
             }
 
@@ -271,6 +276,7 @@
                     userId = user.uid;
                 } else if (initialAuthToken) {
                     try {
+                        // This path is for the Canvas environment
                         await signInWithCustomToken(auth, initialAuthToken);
                         userId = auth.currentUser.uid;
                     } catch (error) {
@@ -279,6 +285,7 @@
                         userId = auth.currentUser.uid;
                     }
                 } else {
+                    // This path is used when hosting on your own site
                     await signInAnonymously(auth);
                     userId = auth.currentUser.uid;
                 }
@@ -309,8 +316,15 @@
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('phone-frame').classList.remove('hidden');
             }, (error) => {
-                console.error("Error subscribing to game state:", error);
-                document.getElementById('loading').innerHTML = '<h2>Error loading game state. Check console for details.</h2>';
+                console.error("Firebase Connection Error:", error);
+                document.getElementById('loading').innerHTML = `
+                    <h2 class="text-xl text-red-700">Database Connection Error</h2>
+                    <p class="text-red-500 font-mono text-sm mt-2 p-2 bg-red-100 rounded-lg">
+                        Check your Firebase Security Rules.
+                        <br>The current user ID (${userId}) is likely being denied read/write access.
+                    </p>
+                    <p class="text-xs mt-3 text-gray-600">See browser console for full error details.</p>
+                `;
             });
         };
 
@@ -534,6 +548,7 @@
         <div class="bg-gray-50 p-4 border-t border-gray-200">
             <p id="current-topic" class="text-xs font-semibold text-gray-600 mb-2"></p>
             <div id="options-container" class="flex flex-col gap-2">
+                <!-- Options will be injected here -->
             </div>
             <div class="flex justify-between items-center mt-2">
                 <div id="score-display" class="text-sm font-semibold text-gray-700">Score: 0</div>
