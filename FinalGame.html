@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Relationship Challenge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #phone-frame {
+            width: 100%;
+            max-width: 400px;
+            height: 90vh;
+            max-height: 800px;
+            background: #ffffff;
+            border-radius: 36px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 8px solid #333;
+            /* Phone bezel */
+            position: relative;
+        }
+
+        #chat-window {
+            flex-grow: 1;
+            padding: 20px 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            margin-bottom: 8px;
+            word-wrap: break-word;
+        }
+
+        .incoming {
+            background-color: #e5e5ea;
+            color: #000;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .outgoing {
+            background-color: #3b82f6;
+            /* Blue-500 */
+            color: #fff;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .option-button {
+            transition: all 0.2s;
+        }
+
+        .option-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+        }
+
+        .score-change {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-top: 5px;
+            text-align: right;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .text-timestamp {
+            font-size: 10px;
+            color: #9ca3af;
+            margin-top: -4px;
+            margin-bottom: 8px;
+        }
+
+        /* Custom alert box styling */
+        .custom-alert {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            max-width: 80%;
+            text-align: center;
+        }
+
+        .alert-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        setLogLevel('Debug');
+
+        let app, db, auth;
+        let userId = 'anonymous';
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const SCENARIOS = [
+            {
+                id: 1,
+                topic: "Conflict Resolution (The Four Horsemen)",
+                date: "Jan 12, 2024",
+                personA: [
+                    "Hey, I know you want me to do more in the house, but you know how tiring it is coming home from a ten hour shift?",
+                    "I don’t complain when you’re tired and don’t do something around the house"
+                ],
+                options: [
+                    { text: "Leave them on delivered", result: { concept: "Stonewalling (Negative)", scoreChange: -20, feedback: "This is Stonewalling. It shuts down communication and is a significant negative predictor for relationship success." } },
+                    { text: "I'm not asking to fight, I appreciate the things you do for us. However, I would also like to address the main problem here.", result: { concept: "Softened Start-up (Positive)", scoreChange: 30, feedback: "Excellent! You validated their feelings while steering back to the core issue. This is a constructive, non-defensive approach." } },
+                    { text: "I don’t want to hear this from you, most of the time I’m cleaning after the mess you’ve made.", result: { concept: "Defensiveness (Negative)", scoreChange: -15, feedback: "This is a defensive response. It redirects blame and prevents productive problem-solving." } },
+                    { text: "So do you think I don’t have more important things to do as well? That was very inconsiderate coming from someone who claims to be emotionally intelligent.", result: { concept: "Contempt & Criticism (Highly Negative)", scoreChange: -30, feedback: "Contempt and Criticism are the most toxic of the Four Horsemen. This seriously damages the relationship." } }
+                ]
+            },
+            {
+                id: 2,
+                topic: "Figuring out how to love (Love Languages)",
+                date: "Nov 3, 2023",
+                personA: [
+                    "I had a really rough week and it feels like we're just roommates passing in the hall. I feel really disconnected."
+                ],
+                options: [
+                    { text: "I know, I feel it too. Let's block out tomorrow night for a special date, just the two of us, no distractions.", result: { concept: "Quality Time (Positive)", scoreChange: 25, feedback: "Great awareness! You recognized the need for Quality Time and offered a specific plan to meet that need." } },
+                    { text: "Don't say that! You know I'm always thinking about you. I love you so much.", result: { concept: "Words of Affirmation (Mismatch)", scoreChange: 5, feedback: "While loving, they asked for presence, not just words. This is a common love language mismatch." } },
+                    { text: "I'll clean the whole kitchen and do the laundry for you tonight, so you can relax.", result: { concept: "Acts of Service (Mismatch)", scoreChange: 10, feedback: "This is Acts of Service. It's helpful, but misses the core need for emotional connection/time." } },
+                    { text: "I just bought you those sneakers you wanted! Maybe that will cheer you up.", result: { concept: "Receiving Gifts (Mismatch/Distraction)", scoreChange: -5, feedback: "You tried to fix an emotional problem with a physical item (Receiving Gifts). This can feel like a distraction from the real issue." } }
+                ]
+            },
+            {
+                id: 3,
+                topic: "Exploring Affection (Sternberg's Triangle)",
+                date: "Oct 5, 2023",
+                personA: [
+                    "I can’t seem to get you off my mind, I miss you."
+                ],
+                options: [
+                    { text: "I miss hanging out with you too. You always make me feel secure", result: { concept: "Intimacy (Liking)", scoreChange: 10, feedback: "You focused on emotional closeness and security (Intimacy). This is a component of healthy love." } },
+                    { text: "I miss your company too…come over tonight", result: { concept: "Passion (Infatuation)", scoreChange: 0, feedback: "You focused only on immediate desire/attraction (Passion), neglecting emotional depth or long-term view." } },
+                    { text: "I miss us too :( Can we work out a schedule together?", result: { concept: "Commitment (Empty Love)", scoreChange: 5, feedback: "You focused on stability and planning (Commitment). While good, it lacks the feeling elements." } },
+                    { text: "I always enjoy your company, I’m here for you always <3", result: { concept: "Consummate Love (Intimacy+Passion+Commitment)", scoreChange: 25, feedback: "The ideal response! This combines emotional closeness, desire, and long-term intention (Consummate Love)." } }
+                ]
+            },
+            {
+                id: 4,
+                topic: "Defining the Relationship (Sternberg's Triangle)",
+                date: "Aug 1, 2023",
+                personA: [
+                    "Hey, we’ve been talking for awhile, and I’ve been thinking…",
+                    "What are we?"
+                ],
+                options: [
+                    { text: "I feel like it’s still a little early to put a label on it, but I’m really having fun", result: { concept: "Avoiding Commitment (Infatuation)", scoreChange: -5, feedback: "You are avoiding commitment. This is often just Infatuation (Passion only) and can feel unstable to a partner." } },
+                    { text: "Well I’m okay with labels :)", result: { concept: "Commitment Only (Empty Love)", scoreChange: 0, feedback: "This response focuses only on duty/labels (Commitment), which can feel like Empty Love if the other components are missing." } },
+                    { text: "Hey, I wanted to say that I’ve been really interested in getting to know you, but I think I just need more time.", result: { concept: "Romantic Love (Intimacy + Passion)", scoreChange: 15, feedback: "This acknowledges strong feelings (Intimacy + Passion), but avoids a full commitment, classifying it as Romantic Love." } },
+                    { text: "I would like to talk about this further in person! I’m glad you brought it up, I’ve been meaning to take things more seriously with you", result: { concept: "Consummate Love (All 3)", scoreChange: 25, feedback: "A mature, open response that demonstrates a readiness for the fully developed love triangle: Consummate Love." } }
+                ]
+            },
+            {
+                id: 5,
+                topic: "Emotional Support (Companionate Love)",
+                date: "June 24, 2024",
+                personA: [
+                    "I had a really bad day today, so I might come off a bit standoffish"
+                ],
+                options: [
+                    { text: "what’s wrong? I’m here for you if you want to talk about it", result: { concept: "Intimacy (Emotional Support)", scoreChange: 15, feedback: "Prioritizing emotional support and closeness (Intimacy)." } },
+                    { text: "would you like to come over, I can help you with that ;)", result: { concept: "Passion (Physical Focus)", scoreChange: 0, feedback: "Focusing on physical attraction (Passion) rather than immediate emotional needs." } },
+                    { text: "its okay, just rest up I’ll take care of everything for today", result: { concept: "Commitment (Duty)", scoreChange: 5, feedback: "A strong sense of duty and responsibility (Commitment)." } },
+                    { text: "ill get you a cup of tea, let’s talk it through", result: { concept: "Companionate Love (Intimacy + Commitment)", scoreChange: 25, feedback: "The perfect balance: offering comfort (Commitment) while inviting emotional dialogue (Intimacy). Companionate Love." } }
+                ]
+            },
+            {
+                id: 6,
+                topic: "The Ultimate Question (Sternberg's Triangle)",
+                date: "Jan 1, 2025",
+                personA: [
+                    "hey..",
+                    "do you love me?"
+                ],
+                options: [
+                    { text: "yes. When you’re sad I’m sad when you’re happy I’m happy.", result: { concept: "Passion Only (Infatuation)", scoreChange: 0, feedback: "This focuses purely on emotional intensity and co-dependence (Passion), which is unstable Infatuation." } },
+                    { text: "of course I love you! I care about you so much, and we still have such an adventure ahead of us", result: { concept: "Consummate Love (All 3)", scoreChange: 30, feedback: "The perfect answer! This affirms emotional closeness (Intimacy), shared future goals (Commitment), and deep feeling (Passion/Overall Love)." } },
+                    { text: "love is a strong word, but I am deeply grateful for you and care for you so much", result: { concept: "Intimacy Only (Liking)", scoreChange: 15, feedback: "This emphasizes emotional closeness and security (Intimacy/Liking) but avoids the commitment/passion elements of 'love'." } },
+                    { text: "Yes of course, I’ll be here no matter what, even if the love goes away.", result: { concept: "Commitment Only (Empty Love)", scoreChange: 5, feedback: "This prioritizes duty and stability (Commitment) over feeling, which can sound like Empty Love." } }
+                ]
+            }
+        ];
+
+        let gameState = {
+            score: 0,
+            currentScenarioIndex: 0,
+            history: [],
+            lastUpdated: new Date().toISOString()
+        };
+
+        const gameStateRef = () => doc(db, `artifacts/${appId}/users/${userId}/relationship_game`, 'state');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!firebaseConfig) {
+                document.getElementById('loading').innerHTML = '<h2>Error: Firebase configuration not found.</h2>';
+                return;
+            }
+
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                } else if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        userId = auth.currentUser.uid;
+                    } catch (error) {
+                        console.error("Custom Auth failed, signing in anonymously.", error);
+                        await signInAnonymously(auth);
+                        userId = auth.currentUser.uid;
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                    userId = auth.currentUser.uid;
+                }
+
+                // 2. Load game state and start listening for updates
+                console.log(`Authenticated with userId: ${userId}`);
+                document.getElementById('userIdDisplay').textContent = userId;
+                loadGameState();
+
+                // Setup event listener for the debug jump button
+                document.getElementById('jump-button').onclick = handleScenarioJump;
+            });
+        });
+
+
+        const loadGameState = async () => {
+            const docRef = gameStateRef();
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    gameState = docSnap.data();
+                    console.log("Game state loaded/updated:", gameState);
+                } else {
+                    console.log("No existing game state found. Starting new game.");
+                    saveGame();
+                }
+
+                renderGame();
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('phone-frame').classList.remove('hidden');
+            }, (error) => {
+                console.error("Error subscribing to game state:", error);
+                document.getElementById('loading').innerHTML = '<h2>Error loading game state. Check console for details.</h2>';
+            });
+        };
+
+        const saveGame = async () => {
+            gameState.lastUpdated = new Date().toISOString();
+            try {
+                await setDoc(gameStateRef(), gameState, { merge: true });
+                console.log("Game state saved successfully.");
+            } catch (e) {
+                console.error("Error saving document: ", e);
+            }
+        };
+
+        const customAlert = (message) => {
+            const existingOverlay = document.getElementById('alert-overlay');
+            if (existingOverlay) existingOverlay.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'alert-overlay';
+            overlay.className = 'alert-overlay';
+
+            const alertBox = document.createElement('div');
+            alertBox.className = 'custom-alert';
+
+            const messageP = document.createElement('p');
+            messageP.className = 'mb-4 text-gray-800';
+            messageP.textContent = message;
+
+            const closeButton = document.createElement('button');
+            closeButton.className = 'p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700';
+            closeButton.textContent = 'OK';
+            closeButton.onclick = () => {
+                overlay.remove();
+            };
+
+            alertBox.appendChild(messageP);
+            alertBox.appendChild(closeButton);
+            overlay.appendChild(alertBox);
+            document.body.appendChild(overlay);
+        };
+
+
+        const chatWindow = document.getElementById('chat-window');
+        const optionsContainer = document.getElementById('options-container');
+        const scoreDisplay = document.getElementById('score-display');
+        const currentTopicDisplay = document.getElementById('current-topic');
+
+        const handleScenarioJump = () => {
+            const inputElement = document.getElementById('scenario-id-input');
+            const scenarioId = parseInt(inputElement.value);
+
+            if (isNaN(scenarioId) || scenarioId < 1 || scenarioId > SCENARIOS.length) {
+                customAlert(`Please enter a valid Scenario ID between 1 and ${SCENARIOS.length}.`);
+                return;
+            }
+
+            const newIndex = scenarioId - 1;
+
+
+            gameState.history = [];
+            gameState.currentScenarioIndex = newIndex;
+            gameState.score = 0;
+
+            customAlert(`Jumping to Scenario ${scenarioId}. Score has been reset.`);
+            inputElement.value = '';
+            saveGame();
+        };
+
+
+        const renderGame = () => {
+            scoreDisplay.textContent = `Score: ${gameState.score}`;
+            chatWindow.innerHTML = '';
+            optionsContainer.innerHTML = '';
+
+            gameState.history.forEach(item => {
+                if (item.type === 'A') {
+                    item.messages.forEach(msg => appendMessage(msg, 'incoming'));
+                } else if (item.type === 'B') {
+                    appendMessage(item.chosenText, 'outgoing');
+                    appendFeedback(item.feedback, item.scoreChange, item.concept);
+                }
+            });
+
+            if (gameState.currentScenarioIndex >= SCENARIOS.length) {
+                displayGameOver();
+                return;
+            }
+
+            const currentScenario = SCENARIOS[gameState.currentScenarioIndex];
+            currentTopicDisplay.textContent = `Scenario ${currentScenario.id}: ${currentScenario.topic}`;
+
+            const dateDiv = document.createElement('div');
+            dateDiv.className = 'text-timestamp text-center my-3';
+            dateDiv.textContent = currentScenario.date;
+            chatWindow.appendChild(dateDiv);
+
+            currentScenario.personA.forEach(msg => appendMessage(msg, 'incoming'));
+
+            currentScenario.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'option-button w-full p-3 mb-2 text-sm bg-white text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50';
+                button.textContent = option.text;
+                button.onclick = () => handleChoice(option);
+                optionsContainer.appendChild(button);
+            });
+
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        };
+
+        const appendMessage = (text, type) => {
+            const div = document.createElement('div');
+            div.className = `message-bubble ${type}`;
+            div.textContent = text;
+            chatWindow.appendChild(div);
+        };
+
+        const appendFeedback = (feedback, scoreChange, concept) => {
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'message-bubble bg-yellow-100 text-gray-800 text-xs mt-2 mb-4 self-center border-l-4 border-yellow-500 shadow-md';
+            summaryDiv.innerHTML = `
+                <p class="font-bold">Concept: ${concept}</p>
+                <p>${feedback}</p>
+                <p class="score-change ${scoreChange >= 0 ? 'text-green-600' : 'text-red-600'}">Score: ${scoreChange >= 0 ? '+' : ''}${scoreChange}</p>
+            `;
+            chatWindow.appendChild(summaryDiv);
+        }
+
+        const handleChoice = (selectedOption) => {
+            const currentScenario = SCENARIOS[gameState.currentScenarioIndex];
+
+            if (gameState.history.length === 0 || gameState.history[gameState.history.length - 1].type === 'B') {
+                gameState.history.push({
+                    type: 'A',
+                    messages: currentScenario.personA,
+                    concept: currentScenario.topic,
+                });
+            }
+
+            gameState.history.push({
+                type: 'B',
+                chosenText: selectedOption.text,
+                scoreChange: selectedOption.result.scoreChange,
+                feedback: selectedOption.result.feedback,
+                concept: selectedOption.result.concept,
+            });
+
+            gameState.score += selectedOption.result.scoreChange;
+            gameState.currentScenarioIndex += 1;
+
+            saveGame();
+        };
+
+        const displayGameOver = () => {
+            let finalMessage = "You have completed all the relationship challenges.";
+            if (gameState.score >= 120) {
+                finalMessage = "Outstanding! Your high score demonstrates exceptional emotional intelligence and communication skills. You are well-equipped for healthy relationships."
+            } else if (gameState.score >= 60) {
+                finalMessage = "Good job! You have a solid foundation in healthy communication, but there are areas you can still grow in, especially around conflict."
+            } else {
+                finalMessage = "This course highlighted key areas for growth. Focusing on avoiding the Four Horsemen and understanding your partner's needs will significantly improve future interactions."
+            }
+
+
+            chatWindow.innerHTML = `
+                <div class="p-4 text-center mt-10">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Course Completed!</h2>
+                    <p class="text-lg text-gray-600 mb-6">${finalMessage}</p>
+                    <p class="text-4xl font-extrabold text-blue-600 mb-8">Final Relationship Score: ${gameState.score}</p>
+                    <div class="p-4 bg-gray-50 rounded-lg shadow-inner">
+                        <h3 class="font-semibold text-gray-700">What does your score mean?</h3>
+                        <p class="text-sm mt-2 text-gray-500">
+                            The maximum score is 155. Scores reflect your ability to communicate constructively (Gottman's Horsemen) and foster a complete, stable love (Sternberg's Triangle).
+                        </p>
+                    </div>
+                    <button id="reset-button" class="mt-8 w-full p-3 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600">Start New Relationship</button>
+                </div>
+            `;
+            optionsContainer.innerHTML = '';
+            document.getElementById('reset-button').onclick = resetGame;
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        const resetGame = () => {
+            gameState.score = 0;
+            gameState.currentScenarioIndex = 0;
+            gameState.history = [];
+            saveGame();
+        }
+
+    </script>
+</head>
+
+<body class="bg-gray-100 p-4">
+
+    <div id="loading" class="absolute inset-0 flex flex-col justify-center items-center bg-gray-50 z-50">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <p class="mt-4 text-gray-600">Authenticating and Loading Relationship...</p>
+    </div>
+
+    <div id="phone-frame" class="hidden">
+
+        <div class="flex items-center justify-between p-4 bg-blue-600 text-white rounded-t-[28px] shadow-lg">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            <div class="flex flex-col items-center">
+                <span class="font-bold text-lg">Person A</span>
+                <span class="text-xs opacity-80">3-Year Relationship</span>
+            </div>
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16">
+                </path>
+            </svg>
+        </div>
+
+        <div id="chat-window" class="flex-grow p-4 space-y-2 bg-white">
+        </div>
+
+        <div class="bg-gray-50 p-4 border-t border-gray-200">
+            <p id="current-topic" class="text-xs font-semibold text-gray-600 mb-2"></p>
+            <div id="options-container" class="flex flex-col gap-2">
+            </div>
+            <div class="flex justify-between items-center mt-2">
+                <div id="score-display" class="text-sm font-semibold text-gray-700">Score: 0</div>
+                <p class="text-xs text-gray-400 text-right">User ID: <span id="userIdDisplay" class="font-mono"></span>
+                </p>
+            </div>
+
+
+            <div class="flex mt-4 p-2 bg-gray-100 rounded-lg border border-gray-300">
+                <input type="number" id="scenario-id-input" placeholder="Scenario ID (1-6)" min="1" max="6"
+                    class="flex-grow p-1 text-sm rounded-l-md border-r-0 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <button id="jump-button"
+                    class="p-1 px-3 text-sm bg-indigo-500 text-white rounded-r-md hover:bg-indigo-600 transition duration-150">Jump</button>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
