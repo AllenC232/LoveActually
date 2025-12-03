@@ -137,9 +137,25 @@
         let app, db, auth;
         let userId = 'anonymous';
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // ====================================================================
+        // === IMPORTANT: REPLACE THESE VARIABLES WITH YOUR FIREBASE CONFIG ===
+        // ====================================================================
+        // When running on your own website, replace 'default-app-id' with a unique string 
+        // and put your Firebase project configuration object here (found in console).
+        const CUSTOM_APP_ID = 'loveactuallyfinal'; // Replaced with the project ID
+        const CUSTOM_FIREBASE_CONFIG = { // Replaced 'null' with your JSON config object
+            apiKey: "AIzaSyCVSYSQE5WUMQtOmWQjZMHlEu30Z-X96U",
+            authDomain: "loveactuallyfinal.firebaseapp.com",
+            projectId: "loveactuallyfinal",
+            storageBucket: "loveactuallyfinal.firebasestorage.app",
+            messagingSenderId: "815805468336",
+            appId: "1:815805468336:web:a8abe786c7ef213af03575",
+            measurementId: "G-DRSR8FSMHZ"
+        };
+        // ====================================================================
+
+        // Canvas environment variables (used if CUSTOM_FIREBASE_CONFIG is null)
+        const appId = CUSTOM_FIREBASE_CONFIG ? CUSTOM_APP_ID : (typeof __app_id !== 'undefined' ? __app_id : CUSTOM_APP_ID);
 
         const SCENARIOS = [
             {
